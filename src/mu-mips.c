@@ -169,8 +169,13 @@ void handle_command() {
 		case 'F':
 		case 'f':
 			//enable forwarding
-			if(scanf("%d", &ENABLE_FORWARDING) != 1)
-				
+			if(scanf("%d", &ENABLE_FORWARDING) != 1) {
+				break;
+			}
+			if(ENABLE_FORWARDING == 0)
+				printf("FORWARDING IS OFF\n")
+			else
+				printf("FORWARDING IS ON\n");
 		case 'S':
 		case 's':
 			if (buffer[1] == 'h' || buffer[1] == 'H'){
