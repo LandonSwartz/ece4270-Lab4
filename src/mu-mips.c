@@ -172,10 +172,8 @@ void handle_command() {
 			if(scanf("%d", &ENABLE_FORWARDING) != 1) {
 				break;
 			}
-			if(ENABLE_FORWARDING == 0)
-				printf("FORWARDING IS OFF\n")
-			else
-				printf("FORWARDING IS ON\n");
+			if(ENABLE_FORWARDING == 0) ? printf("FORWARDING IS OFF\n") : printf("FORWARDING IS ON\n");
+			break;
 		case 'S':
 		case 's':
 			if (buffer[1] == 'h' || buffer[1] == 'H'){
@@ -323,7 +321,9 @@ void handle_pipeline()
 {
 	/*INSTRUCTION_COUNT should be incremented when instruction is done*/
 	/*Since we do not have branch/jump instructions, INSTRUCTION_COUNT should be incremented in WB stage */
-	
+	NEXT_STATE = CURRENT_STATE;
+	if(STALL_COUNT > 0)
+		STALL_COUNT--; //Decrementing stall
 	WB();
 	MEM();
 	EX();
@@ -337,7 +337,10 @@ void handle_pipeline()
 /************************************************************/
 void WB()
 {
-	/*IMPLEMENT THIS*/
+	//if bubble happening then skip stage
+	if(MEM_WB.stage_stalled == 1)
+		return; 
+	
 	uint32_t opcode = (MEM_WB.IR & 0xFC000000) >> 26;
 	
 	//printf("opcode = %x\n", opcode);
@@ -508,6 +511,17 @@ void rtypeWB(uint32_t funct, uint32_t rd)
 /************************************************************/
 void MEM()
 {
+	//if stalled then only pass forward stall
+	if(EX_MEM.stage_stalled == 1)
+	{
+		printf("stage stalled\n"); //just for debugging
+		MEM_WB.stage_stalled = 0;
+		MEM_WB.IR = 0; //instruction
+		MEM_WB.ALUOutput = 0; //forwarding output before manpulating
+		MEM_WB.PC = 0; //program counter
+		return;
+	}
+	
 	//forwarding the values from pipeline regsisters
 	MEM_WB.IR = EX_MEM.IR; //instruction
 	MEM_WB.ALUOutput = EX_MEM.ALUOutput; //forwarding output before manpulating
@@ -570,6 +584,14 @@ void MEM()
 /************************************************************/
 void EX()
 {
+	if(ID_EX.stage_stalled = 1)
+	{
+		EX_MEM.IR = 0;
+		EX_MEM.A = 0;
+		EX_MEM.B = 0;
+		EX_MEM.ALUOutput = 0;
+	}
+	
 	EX_MEM.IR = ID_EX.IR;
 	EX_MEM.A = ID_EX.A;
 	EX_MEM.B = ID_EX.B;
@@ -585,7 +607,6 @@ void EX()
 	else if(ID_EX.IR != 0xC) {
 		printf("ERROR EX\n");
 	}
-	/*IMPLEMENT THIS*/
 }
 
 uint32_t ALUOperationI() {
@@ -772,6 +793,14 @@ int reg_reg(uint32_t opcode, uint32_t instruction) {
 /************************************************************/
 void ID()
 {
+	if(STALL_COUNT > 0)
+	{
+		ID_EX.stage_stalled = 1;
+		IF_ID.IR = ID_EX.IR;
+		printf("Stall at ID stage at $x\n", CURRENT_STATE.PC);
+		return;
+	}
+	
 	ID_EX.IR = IF_ID.IR; //transfering instruction
 	ID_EX.imm = IF_ID.IR & 0x00008000 ? IF_ID.IR | 0xFFFF0000 : IF_ID.IR & 0x0000FFFF; //immediate
 	ID_EX.A = CURRENT_STATE.REGS[(IF_ID.IR>>21) & 0x1F]; //rs reg
@@ -779,14 +808,49 @@ void ID()
 	ID_EX.PC = IF_ID.PC; //pc transfer
 }
 
+
+//function to detect data hazard in pipeline
+void dataHazardDetection()
+{
+	int temp = ENABLE_FORWARDING;
+	
+	//if accessing memory in exe to mem or mem to wb, turn off forwarding
+	if(EX_MEM.MEM_ACCESS_FLAG == 1 || MEM_WB.MEM_ACCESS_FLAG == 1)
+		temp = 0; //turn off enable forwarding
+	
+	if((EX_MEM.REG_WRITE_FLAG && (EX_MEM.REG_RD_VALUE != 0)) && (EX_MEM.REG_RD_VALUE == ID_EX.REG_RS_VALUE))
+	{
+		if(temp == 1)
+		{
+			FORWARDING_TYPE = 1;
+		}
+		else
+			STALL_COUNT = 2;
+		
+	if((EX_MEM.REG_WRITE && (EX_MEM.REG_RD_VALUE != 0)) && (EX_MEM.REG_RD_VALUE == ID_EX.REG_RT_VALUE))
+	{
+		if(temp == 1)
+			FORWARDING_TYPE = 2;
+		else
+			STALL_COUNT = 2;
+	}
+	
+	//an so on for other data hazards
+			
+}
+
 /************************************************************/
 /* instruction fetch (IF) pipeline stage:                                                              */ 
 /************************************************************/
 void IF()
 {
-	IF_ID.IR = mem_read_32(CURRENT_STATE.PC);
-	NEXT_STATE.PC = CURRENT_STATE.PC + 4; //incrementing program counter by four for next state
-	/*IMPLEMENT THIS*/
+	if(STALL_FLAG == 0)
+	{
+		IF_ID.IR = mem_read_32(CURRENT_STATE.PC);
+		NEXT_STATE.PC = CURRENT_STATE.PC + 4; //incrementing program counter by four for next state
+	}
+	else
+		printf("Stalling at IF stage\n");
 }
 
 
