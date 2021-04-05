@@ -513,6 +513,9 @@ void rtypeWB(uint32_t funct, uint32_t rd)
 void MEM()
 {
 	MEM_WB.stage_stalled = EX_MEM.stage_stalled;
+	MEM_WB.REG_RD_VALUE = EX_MEM.REG_RD_VALUE;
+	MEM_WB.REG_RS_VALUE = EX_MEM.REG_RS_VALUE;
+	MEM_WB.REG_RT_VALUE = EX_MEM.REG_RT_VALUE;
 	//if stalled then only pass forward stall
 	if(EX_MEM.stage_stalled == 1)
 	{
@@ -599,6 +602,14 @@ void EX()
 	}
 	if(ID_EX.Forwarding_Type == 2 || ID_EX.Forwarding_Type == 6) {
 		ID_EX.B = MEM_WB.ALUOutput;
+		EX_MEM.B = ID_EX.B;
+	}
+	if(ID_EX.Forwarding_Type == 3) {
+		ID_EX.A = CURRENT_STATE.REGS[ID_EX.REG_RS_VALUE];
+		EX_MEM.A = ID_EX.A;
+	}
+	if(ID_EX.Forwarding_Type == 4) {
+		ID_EX.B = NEXT_STATE.REGS[ID_EX.REG_RT_VALUE];
 		EX_MEM.B = ID_EX.B;
 	}
 	if(ID_EX.Forwarding_Type == 7) {
@@ -837,87 +848,63 @@ void dataHazardDetection()
 	// 	temp = 0; //turn off enable forwarding
 	if(((EX_MEM.REG_RD_VALUE != 0)) && (EX_MEM.REG_RD_VALUE == ID_EX.REG_RS_VALUE))
 	{
-		printf("Forwarding 1\n");
 		if(temp == 1)
 		{
 			ID_EX.Forwarding_Type = 1;
 		}
 		else
 			STALL_COUNT = 2;
-		printf("%d|%d|%d\n", ID_EX.REG_RS_VALUE, ID_EX.REG_RT_VALUE, ID_EX.REG_RD_VALUE);
-		printf("%d|%d|%d\n", EX_MEM.REG_RS_VALUE, EX_MEM.REG_RT_VALUE, EX_MEM.REG_RD_VALUE);
 	}
 	else if(((EX_MEM.REG_RD_VALUE != 0)) && (EX_MEM.REG_RD_VALUE == ID_EX.REG_RT_VALUE))
 	{
-		printf("Forwarding 2\n");
 		if(temp == 1)
 			ID_EX.Forwarding_Type = 2;
 		else
 			STALL_COUNT = 2;
-		printf("%d|%d|%d\n", ID_EX.REG_RS_VALUE, ID_EX.REG_RT_VALUE, ID_EX.REG_RD_VALUE);
-		printf("%d|%d|%d\n", EX_MEM.REG_RS_VALUE, EX_MEM.REG_RT_VALUE, EX_MEM.REG_RD_VALUE);
 	}
 	else if(((MEM_WB.REG_RD_VALUE != 0)) && (MEM_WB.REG_RD_VALUE == ID_EX.REG_RS_VALUE))
 	{
-		printf("Forwarding 3\n");
 		if(temp == 1)
 		{
 			ID_EX.Forwarding_Type = 3;
 		}
 		else
 			STALL_COUNT = 1;
-		printf("%d|%d|%d\n", ID_EX.REG_RS_VALUE, ID_EX.REG_RT_VALUE, ID_EX.REG_RD_VALUE);
-		printf("%d|%d|%d\n", MEM_WB.REG_RS_VALUE, MEM_WB.REG_RT_VALUE, MEM_WB.REG_RD_VALUE);
 	}
 	else if(((MEM_WB.REG_RD_VALUE != 0)) && (MEM_WB.REG_RD_VALUE == ID_EX.REG_RT_VALUE))
 	{
-		printf("Forwarding 4\n");
 		if(temp == 1)
 			ID_EX.Forwarding_Type = 4;
 		else
 			STALL_COUNT = 1;
-		printf("%d|%d|%d\n", ID_EX.REG_RS_VALUE, ID_EX.REG_RT_VALUE, ID_EX.REG_RD_VALUE);
-		printf("%d|%d|%d\n", MEM_WB.REG_RS_VALUE, MEM_WB.REG_RT_VALUE, MEM_WB.REG_RD_VALUE);
 	}
 	else if(reg_imm(EX_MEM.IR>>26) && (EX_MEM.REG_RT_VALUE == ID_EX.REG_RS_VALUE))
 	{
-		printf("Forwarding 5\n");
 		if(temp == 1)
 			ID_EX.Forwarding_Type = 5;
 		else
 			STALL_COUNT = 2;
-		printf("%d|%d|%d\n", ID_EX.REG_RS_VALUE, ID_EX.REG_RT_VALUE, ID_EX.REG_RD_VALUE);
-		printf("%d|%d|%d\n", EX_MEM.REG_RS_VALUE, EX_MEM.REG_RT_VALUE, EX_MEM.REG_RD_VALUE);
 	}
 	else if(reg_imm(EX_MEM.IR>>26) && (EX_MEM.REG_RT_VALUE == ID_EX.REG_RT_VALUE))
 	{
-		printf("Forwarding 6\n");
 		if(temp == 1)
 			ID_EX.Forwarding_Type = 6;
 		else
 			STALL_COUNT = 2;
-		printf("%d|%d|%d\n", ID_EX.REG_RS_VALUE, ID_EX.REG_RT_VALUE, ID_EX.REG_RD_VALUE);
-		printf("%d|%d|%d\n", EX_MEM.REG_RS_VALUE, EX_MEM.REG_RT_VALUE, EX_MEM.REG_RD_VALUE);
 	}
 	else if(load_store(EX_MEM.IR>>26, EX_MEM.IR & 0x0000003F) && (EX_MEM.REG_RT_VALUE == ID_EX.REG_RS_VALUE))
 	{
-		printf("Forwarding 7\n");
 		if(temp == 1)
 			ID_EX.Forwarding_Type = 7;
 		else
 			STALL_COUNT = 2;
-		printf("%d|%d|%d\n", ID_EX.REG_RS_VALUE, ID_EX.REG_RT_VALUE, ID_EX.REG_RD_VALUE);
-		printf("%d|%d|%d\n", EX_MEM.REG_RS_VALUE, EX_MEM.REG_RT_VALUE, EX_MEM.REG_RD_VALUE);
 	}
 	else if(load_store(EX_MEM.IR>>26, EX_MEM.IR & 0x0000003F) && (EX_MEM.REG_RT_VALUE == ID_EX.REG_RT_VALUE))
 	{
-		printf("Forwarding 8\n");
 		if(temp == 1)
 			ID_EX.Forwarding_Type = 8;
 		else
 			STALL_COUNT = 2;
-		printf("%d|%d|%d\n", ID_EX.REG_RS_VALUE, ID_EX.REG_RT_VALUE, ID_EX.REG_RD_VALUE);
-		printf("%d|%d|%d\n", EX_MEM.REG_RS_VALUE, EX_MEM.REG_RT_VALUE, EX_MEM.REG_RD_VALUE);
 	}
 	// printf("%d\n", reg_imm(EX_MEM.IR>>26));
 	// printf("%d|%d|%d\n", ID_EX.REG_RS_VALUE, ID_EX.REG_RT_VALUE, ID_EX.REG_RD_VALUE);
