@@ -22,6 +22,7 @@ void help() {
 	printf("low <val>\t-- set the LO register to <val>\n");
 	printf("print\t-- print the program loaded into memory\n");
 	printf("show\t-- print the current content of the pipeline registers\n");
+	printf("forwarding <val>\t-- enable forwarding with 1, disable with 0 for <val>\n");
 	printf("?\t-- display help menu\n");
 	printf("quit\t-- exit the simulator\n\n");
 	printf("------------------------------------------------------------------\n\n");
@@ -978,13 +979,13 @@ void show_pipeline(){
 	printf("ID/EX.imm %08X\n\n", ID_EX.imm);
 	
 	//MEM
-	printf("EX/MEM.IR %08X", EX_MEM.IR);  print_instruction(EX_MEM.IR);
+	printf("EX/MEM.IR %08X ", EX_MEM.IR);  print_instruction(EX_MEM.IR);
 	printf("EX/MEM.A %08X\n", EX_MEM.A);
 	printf("EX/MEM.B %08X\n", EX_MEM.B);
 	printf("EX/MEM.ALUOutput %08X\n\n", EX_MEM.ALUOutput);
 	
 	//WB
-	printf("MEM/WB.IR %08X", MEM_WB.IR);  print_instruction(MEM_WB.IR);
+	printf("MEM/WB.IR %08X ", MEM_WB.IR);  print_instruction(MEM_WB.IR);
 	printf("MEM/WB.ALUOutput %08X\n", MEM_WB.ALUOutput);
 	printf("MEM/WB.LMD %08X\n\n", MEM_WB.LMD);
 	
@@ -1006,6 +1007,12 @@ void print_instruction(uint32_t instr)
 {
 	//From lab 1
 	uint32_t instruction = instr; //reading in address from mem
+	
+	if(instruction == 0)
+	{
+		printf("No instruction yet\n");
+		return;
+	}
 	
 	//creating bit massk
 	unsigned opcode_mask = createMask(26,31); //last six bits mask, opcode
