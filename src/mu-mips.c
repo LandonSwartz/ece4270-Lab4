@@ -172,7 +172,7 @@ void handle_command() {
 			if(scanf("%d", &ENABLE_FORWARDING) != 1) {
 				break;
 			}
-			if(ENABLE_FORWARDING == 0) ? printf("FORWARDING IS OFF\n") : printf("FORWARDING IS ON\n");
+			ENABLE_FORWARDING == 0 ? printf("FORWARDING IS OFF\n") : printf("FORWARDING IS ON\n");
 			break;
 		case 'S':
 		case 's':
@@ -400,6 +400,7 @@ void WB()
 			}
 		}
 	}
+	CURRENT_STATE = NEXT_STATE;
 	
 	INSTRUCTION_COUNT++; //increasing instriction count after WB stage, don't know if end is good idea but c'est la vie
 }
@@ -511,14 +512,11 @@ void rtypeWB(uint32_t funct, uint32_t rd)
 /************************************************************/
 void MEM()
 {
+	MEM_WB.stage_stalled = EX_MEM.stage_stalled;
 	//if stalled then only pass forward stall
 	if(EX_MEM.stage_stalled == 1)
 	{
-		printf("stage stalled\n"); //just for debugging
-		MEM_WB.stage_stalled = 0;
-		MEM_WB.IR = 0; //instruction
-		MEM_WB.ALUOutput = 0; //forwarding output before manpulating
-		MEM_WB.PC = 0; //program counter
+		printf("MEM stage stalled\n"); //just for debugging
 		return;
 	}
 	
@@ -584,17 +582,16 @@ void MEM()
 /************************************************************/
 void EX()
 {
-	if(ID_EX.stage_stalled = 1)
-	{
-		EX_MEM.IR = 0;
-		EX_MEM.A = 0;
-		EX_MEM.B = 0;
-		EX_MEM.ALUOutput = 0;
-	}
+	EX_MEM.stage_stalled =ID_EX.stage_stalled;
 	
 	EX_MEM.IR = ID_EX.IR;
 	EX_MEM.A = ID_EX.A;
 	EX_MEM.B = ID_EX.B;
+	EX_MEM.REG_RD_VALUE = ID_EX.REG_RD_VALUE;
+	EX_MEM.REG_RS_VALUE = ID_EX.REG_RS_VALUE;
+	EX_MEM.REG_RT_VALUE = ID_EX.REG_RT_VALUE;
+	if(EX_MEM.stage_stalled)
+		return;
 	if(load_store(ID_EX.IR>>26, ID_EX.IR & 0x0000003F)) {
 		EX_MEM.ALUOutput = ID_EX.A + ID_EX.imm;
 	}
@@ -792,33 +789,40 @@ int reg_reg(uint32_t opcode, uint32_t instruction) {
 /* instruction decode (ID) pipeline stage:                                                         */ 
 /************************************************************/
 void ID()
-{
-	if(STALL_COUNT > 0)
-	{
-		ID_EX.stage_stalled = 1;
-		IF_ID.IR = ID_EX.IR;
-		printf("Stall at ID stage at $x\n", CURRENT_STATE.PC);
-		return;
-	}
-	
+{		
 	ID_EX.IR = IF_ID.IR; //transfering instruction
 	ID_EX.imm = IF_ID.IR & 0x00008000 ? IF_ID.IR | 0xFFFF0000 : IF_ID.IR & 0x0000FFFF; //immediate
 	ID_EX.A = CURRENT_STATE.REGS[(IF_ID.IR>>21) & 0x1F]; //rs reg
 	ID_EX.B = CURRENT_STATE.REGS[(IF_ID.IR>>16) & 0x1F]; //rt reg
 	ID_EX.PC = IF_ID.PC; //pc transfer
+	ID_EX.REG_RS_VALUE = (IF_ID.IR>>21) & 0x1F;
+	ID_EX.REG_RT_VALUE = (IF_ID.IR>>16) & 0x1F;
+	ID_EX.REG_RD_VALUE = (IF_ID.IR>>11) & 0x1F;
+	ID_EX.stage_stalled = 0;
+	if(STALL_COUNT==0)
+		dataHazardDetection();
+	if(STALL_COUNT > 0)
+	{
+		ID_EX.stage_stalled = 1;
+		ID_EX.IR = 0xFFFFFFFF;
+		ID_EX.REG_RD_VALUE = -1;
+		ID_EX.REG_RT_VALUE = -1;
+		ID_EX.REG_RS_VALUE = -1;
+		printf("Stall at ID stage at %x\n", CURRENT_STATE.PC);
+		return;
+	}
 }
-
+int pass_if = 0;
 
 //function to detect data hazard in pipeline
 void dataHazardDetection()
 {
-	int temp = ENABLE_FORWARDING;
+	int temp = 0;
 	
-	//if accessing memory in exe to mem or mem to wb, turn off forwarding
-	if(EX_MEM.MEM_ACCESS_FLAG == 1 || MEM_WB.MEM_ACCESS_FLAG == 1)
-		temp = 0; //turn off enable forwarding
-	
-	if((EX_MEM.REG_WRITE_FLAG && (EX_MEM.REG_RD_VALUE != 0)) && (EX_MEM.REG_RD_VALUE == ID_EX.REG_RS_VALUE))
+	// //if accessing memory in exe to mem or mem to wb, turn off forwarding
+	// if(EX_MEM.MEM_ACCESS_FLAG == 1 || MEM_WB.MEM_ACCESS_FLAG == 1)
+	// 	temp = 0; //turn off enable forwarding
+	if(((EX_MEM.REG_RD_VALUE != 0)) && (EX_MEM.REG_RD_VALUE == ID_EX.REG_RS_VALUE))
 	{
 		if(temp == 1)
 		{
@@ -826,14 +830,62 @@ void dataHazardDetection()
 		}
 		else
 			STALL_COUNT = 2;
-		
-	if((EX_MEM.REG_WRITE && (EX_MEM.REG_RD_VALUE != 0)) && (EX_MEM.REG_RD_VALUE == ID_EX.REG_RT_VALUE))
+	}
+	else if(((EX_MEM.REG_RD_VALUE != 0)) && (EX_MEM.REG_RD_VALUE == ID_EX.REG_RT_VALUE))
 	{
 		if(temp == 1)
 			FORWARDING_TYPE = 2;
 		else
 			STALL_COUNT = 2;
 	}
+	else if(((MEM_WB.REG_RD_VALUE != 0)) && (MEM_WB.REG_RD_VALUE == ID_EX.REG_RS_VALUE))
+	{
+		if(temp == 1)
+		{
+			FORWARDING_TYPE = 1;
+		}
+		else
+			STALL_COUNT = 1;
+	}
+	else if(((MEM_WB.REG_RD_VALUE != 0)) && (MEM_WB.REG_RD_VALUE == ID_EX.REG_RT_VALUE))
+	{
+		if(temp == 1)
+			FORWARDING_TYPE = 2;
+		else
+			STALL_COUNT = 1;
+	}
+	else if(reg_imm(EX_MEM.IR>>26) && (EX_MEM.REG_RT_VALUE == ID_EX.REG_RS_VALUE))
+	{
+		if(temp == 1)
+			FORWARDING_TYPE = 2;
+		else
+			STALL_COUNT = 2;
+	}
+	else if(reg_imm(EX_MEM.IR>>26) && (EX_MEM.REG_RT_VALUE == ID_EX.REG_RT_VALUE))
+	{
+		if(temp == 1)
+			FORWARDING_TYPE = 2;
+		else
+			STALL_COUNT = 2;
+	}
+	else if(load_store(EX_MEM.IR>>26, EX_MEM.IR & 0x0000003F) && (EX_MEM.REG_RT_VALUE == ID_EX.REG_RS_VALUE))
+	{
+		if(temp == 1)
+			FORWARDING_TYPE = 2;
+		else
+			STALL_COUNT = 2;
+	}
+	else if(load_store(EX_MEM.IR>>26, EX_MEM.IR & 0x0000003F) && (EX_MEM.REG_RT_VALUE == ID_EX.REG_RT_VALUE))
+	{
+		if(temp == 1)
+			FORWARDING_TYPE = 2;
+		else
+			STALL_COUNT = 2;
+	}
+	printf("%x\n", CURRENT_STATE.REGS[14]);
+	// printf("%d\n", reg_imm(EX_MEM.IR>>26));
+	// printf("%d|%d|%d\n", ID_EX.REG_RS_VALUE, ID_EX.REG_RT_VALUE, ID_EX.REG_RD_VALUE);
+	// printf("%d|%d|%d\n", EX_MEM.REG_RS_VALUE, EX_MEM.REG_RT_VALUE, EX_MEM.REG_RD_VALUE);
 	
 	//an so on for other data hazards
 			
@@ -844,8 +896,10 @@ void dataHazardDetection()
 /************************************************************/
 void IF()
 {
-	if(STALL_FLAG == 0)
+	if(STALL_COUNT == 0)
 	{
+		if(IF_ID.IR == 0x0000000C)
+			return; 
 		IF_ID.IR = mem_read_32(CURRENT_STATE.PC);
 		NEXT_STATE.PC = CURRENT_STATE.PC + 4; //incrementing program counter by four for next state
 	}
@@ -901,13 +955,13 @@ void show_pipeline(){
 	printf("ID/EX.imm %08X\n\n", ID_EX.imm);
 	
 	//MEM
-	printf("EX/MEM.IR %08X\n", EX_MEM.IR);
+	printf("EX/MEM.IR %08X", EX_MEM.IR);  print_instruction(EX_MEM.IR);
 	printf("EX/MEM.A %08X\n", EX_MEM.A);
 	printf("EX/MEM.B %08X\n", EX_MEM.B);
 	printf("EX/MEM.ALUOutput %08X\n\n", EX_MEM.ALUOutput);
 	
 	//WB
-	printf("MEM/WB.IR %08X\n", MEM_WB.IR);
+	printf("MEM/WB.IR %08X", MEM_WB.IR);  print_instruction(MEM_WB.IR);
 	printf("MEM/WB.ALUOutput %08X\n", MEM_WB.ALUOutput);
 	printf("MEM/WB.LMD %08X\n\n", MEM_WB.LMD);
 	
@@ -960,6 +1014,11 @@ void print_instruction(uint32_t instr)
 	
 	switch(opcode)
 	{
+		case 0xFC000000:
+		{
+			printf("Stall\n");
+			break;
+		}
 		case 0x20000000: //add ADDI
 		{
 			printf("ADDI ");
@@ -1267,12 +1326,14 @@ int main(int argc, char *argv[]) {
 	printf("Welcome to MU-MIPS SIM...\n");
 	printf("**************************\n\n");
 	
-	if (argc < 2) {
+	if (argc != 2) {
 		printf("Error: You should provide input file.\nUsage: %s <input program> \n\n",  argv[0]);
 		exit(1);
 	}
 
+	printf("test");
 	strcpy(prog_file, argv[1]);
+	printf("test");
 	initialize();
 	load_program();
 	help();
