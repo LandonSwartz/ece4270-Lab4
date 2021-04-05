@@ -56,6 +56,7 @@ typedef struct CPU_Pipeline_Reg_Struct{
 	uint32_t ALUOutputLow;
 	uint32_t LMD;
 	int stage_stalled; //1 for bubble, 0 for standard
+	int Forwarding_Type;
 	int MEM_ACCESS_FLAG; //is there a memory access in this command?
 	int REG_WRITE_FLAG; //is there writing back to a reg during this command that could cause a data hazard?
 	uint32_t REG_RD_VALUE; //for checking for data hazards
@@ -85,7 +86,7 @@ CPU_Pipeline_Reg MEM_WB;
 
 char prog_file[32];
 
-int ENABLE_FORWARDING = 0; //forwarding enable flag
+int ENABLE_FORWARDING = 1; //forwarding enable flag
 int STALL_COUNT = 0; //flag for stalling
 int FORWARDING_TYPE; //one for reg to alu output, two for 
 
